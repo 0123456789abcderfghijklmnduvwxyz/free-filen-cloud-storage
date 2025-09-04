@@ -5,7 +5,7 @@ To run/install this thing do these command in the same directory as the requirme
 
 pip install uv
 
-uv pip install -r requirments.txt --system
+uv pip install -r requirements --system
 
 playwright install
 
