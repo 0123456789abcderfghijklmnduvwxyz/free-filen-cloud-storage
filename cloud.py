@@ -1,9 +1,9 @@
 """
-tempmail_playwright.py
+tempmail_playwright_threaded.py
 
 - Uses temp-mail API to generate disposable emails.
 - Uses Playwright to drive the Filen.io registration UI.
-- Supports concurrent account creation with worker pool.
+- Supports concurrent account creation with threads.
 - Retries once per account with same email/password, then discards it if it still fails.
 - Saves accounts in accounts.txt as email:password.
 
@@ -17,6 +17,8 @@ import time
 import random
 import string
 import requests
+import threading
+from queue import Queue
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
 # Temp mail endpoints
@@ -140,7 +142,7 @@ async def try_create_account(index, email, password, headless, window_pos, windo
             # Go to referral page
             await page.goto(INITIAL_REFERRAL_URL, wait_until="domcontentloaded", timeout=60000)
 
-            # Click the first register link (either "Registrieren" or "Kostenlos loslegen")
+            # Click the register link
             try:
                 await page.locator('a[href="https://app.filen.io/#/register"]').first.click(timeout=30000)
                 print(f"[Acc {index}] Clicked register link")
@@ -148,6 +150,23 @@ async def try_create_account(index, email, password, headless, window_pos, windo
                 print(f"[Acc {index}] Could not find register link.")
                 await browser.close()
                 return False
+
+            # Try multiple ways to click the register link
+            try:
+                # First try by href
+                link = page.locator('a[href*="#/register"]')
+                if await link.count() > 0:
+                    await link.first.click(timeout=30000)
+                    print(f"[Acc {index}] Clicked register link (by href)")
+                else:
+                    # Fallback: look by visible text
+                    await page.get_by_role("link", name="Get started for free").click(timeout=30000)
+                    print(f"[Acc {index}] Clicked register link (by text)")
+            except PlaywrightTimeoutError:
+                print(f"[Acc {index}] Could not find register link.")
+                await browser.close()
+                return False
+
 
             # Wait for form
             await page.wait_for_selector("input#email", timeout=30000)
@@ -208,21 +227,29 @@ async def create_single_account(index, headless, window_pos, window_size):
 
 
 # -------------------------
-# Worker pool
+# Threaded worker
 # -------------------------
-async def worker(worker_id, job_queue, headless, positions):
-    results = []
-    while not job_queue.empty():
-        acc_index = await job_queue.get()
-        pos, size = positions[worker_id % len(positions)]
-        success = await create_single_account(acc_index, headless, pos, size)
-        results.append(success)
-        job_queue.task_done()
-    return results
+def thread_worker(thread_id, job_queue, headless, positions, results):
+    async def run_jobs():
+        local_results = []
+        while not job_queue.empty():
+            try:
+                acc_index = job_queue.get_nowait()
+            except:
+                break
+            pos, size = positions[thread_id % len(positions)]
+            success = await create_single_account(acc_index, headless, pos, size)
+            local_results.append(success)
+            job_queue.task_done()
+        results.extend(local_results)
+
+    asyncio.run(run_jobs())
 
 
-async def main():
-    # Ask user for settings
+# -------------------------
+# Main entry
+# -------------------------
+def main():
     try:
         total_accounts = int(input("How many accounts do you want to create? ").strip())
     except ValueError:
@@ -238,18 +265,28 @@ async def main():
 
     print(f"\n[Main] Creating {total_accounts} accounts with {threads} threads (headless={headless})...\n")
 
-    job_queue = asyncio.Queue()
+    # Shared job queue
+    job_queue = Queue()
     for i in range(1, total_accounts + 1):
-        job_queue.put_nowait(i)
+        job_queue.put(i)
 
     positions = compute_window_positions(threads)
 
-    workers = [asyncio.create_task(worker(wid, job_queue, headless, positions)) for wid in range(threads)]
-    results = await asyncio.gather(*workers)
+    # Launch threads
+    thread_list = []
+    results = []
 
-    created = sum(1 for worker_res in results for r in worker_res if r)
+    for tid in range(threads):
+        t = threading.Thread(target=thread_worker, args=(tid, job_queue, headless, positions, results))
+        t.start()
+        thread_list.append(t)
+
+    for t in thread_list:
+        t.join()
+
+    created = sum(1 for r in results if r)
     print(f"\n[Main] Finished. Successfully created {created}/{total_accounts} accounts.\n")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
