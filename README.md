@@ -4,6 +4,7 @@ I sure do love my daily does of breaking TOS of file hosting services, this it a
 To run/install this thing do these command in the same directory as the requirments.txt and also the python file if you want
 
 pip install uv
+
 uv pip install -r requirments.txt --system
 
 then just run the script, input whatever it asks you to input and then just run it, when trying to look at the browsers so turning headless of it does not put the browsers correctly but i cant be bothered to fix it, so go do it yourself or live with using it weird or just use it headless.
