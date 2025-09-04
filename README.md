@@ -7,6 +7,8 @@ pip install uv
 
 uv pip install -r requirments.txt --system
 
+playwright install
+
 then just run the script, input whatever it asks you to input and then just run it, when trying to look at the browsers so turning headless of it does not put the browsers correctly but i cant be bothered to fix it, so go do it yourself or live with using it weird or just use it headless.
 
 All the accounts will be saved in accounts.txt in the same directory, and then you can just go on filen.io login and upload and share files if you need to so badly. Each account is 20GB each i think, if you have files bigger than that you just split them up, google it, ask chatgpt or whatever on how to do it. Also i recommend using a VPN or proxy cause if you go above 5 threads it will rate limit you, which will i think and hope at least not make cloudflare think you are a bot
